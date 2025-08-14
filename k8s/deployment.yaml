@@ -1,0 +1,149 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jetbrainsai2api
+  labels:
+    app: jetbrainsai2api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jetbrainsai2api
+  template:
+    metadata:
+      labels:
+        app: jetbrainsai2api
+    spec:
+      # 添加污点容忍，解决节点调度问题
+      tolerations:
+      - key: "database.run.claw.cloud/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "monitor.run.claw.cloud/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "devbox.sealos.io/node"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
+      # 节点选择器，避免调度到特殊用途的节点
+      nodeSelector:
+        kubernetes.io/os: linux
+      
+      # 节点亲和性配置
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: node-role.kubernetes.io/worker
+                operator: In
+                values: ["true"]
+          - weight: 50
+            preference:
+              matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values: ["amd64"]
+        
+        # Pod反亲和性，避免调度到资源紧张的节点
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values: ["high-resource-app"]
+              topologyKey: kubernetes.io/hostname
+      
+      containers:
+      - name: jetbrainsai2api
+        image: ghcr.io/your-username/jetbrainsai2api:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        
+        # 优化资源配置，降低CPU和内存需求
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # 环境变量配置
+        env:
+        - name: DEBUG_MODE
+          value: "false"
+        - name: JWT_TOKEN_1
+          valueFrom:
+            secretKeyRef:
+              name: jetbrainsai-secrets
+              key: jwt-token-1
+              optional: true
+        - name: JWT_TOKEN_2
+          valueFrom:
+            secretKeyRef:
+              name: jetbrainsai-secrets
+              key: jwt-token-2
+              optional: true
+        - name: JWT_TOKEN_3
+          valueFrom:
+            secretKeyRef:
+              name: jetbrainsai-secrets
+              key: jwt-token-3
+              optional: true
+        - name: LICENSE_ID_1
+          valueFrom:
+            secretKeyRef:
+              name: jetbrainsai-secrets
+              key: license-id-1
+              optional: true
+        - name: AUTHORIZATION_1
+          valueFrom:
+            secretKeyRef:
+              name: jetbrainsai-secrets
+              key: authorization-1
+              optional: true
+        
+        # 健康检查
+        livenessProbe:
+          httpGet:
+            path: /v1/models
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /v1/models
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # 启动探针，给应用更多启动时间
+        startupProbe:
+          httpGet:
+            path: /v1/models
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 20
+      
+      # 重启策略
+      restartPolicy: Always
+      
+      # 优雅关闭时间
+      terminationGracePeriodSeconds: 30
