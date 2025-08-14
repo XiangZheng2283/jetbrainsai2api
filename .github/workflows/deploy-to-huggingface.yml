@@ -55,10 +55,7 @@ jobs:
         
         # Copy application files
         cp main.py huggingface-space/
-        cp config_manager.py huggingface-space/
         cp requirements.txt huggingface-space/
-        cp jetbrainsai.json huggingface-space/ || echo "jetbrainsai.json not found, skipping"
-        cp client_api_keys.json huggingface-space/ || echo "client_api_keys.json not found, skipping"
         cp models.json huggingface-space/ || echo "models.json not found, skipping"
         
         # Create README for Hugging Face Space
@@ -89,9 +86,12 @@ jobs:
 
         Configure your JWT tokens and API keys through the Hugging Face Spaces secrets:
 
-        - `JWT_TOKEN_1` - `JWT_TOKEN_5`: Your JWT tokens
-        - `OPENAI_API_KEY`: OpenAI API key (optional)
-        - `ANTHROPIC_API_KEY`: Anthropic API key (optional)
+        **推荐方式（逗号分隔格式）**：
+        - `JWT_TOKEN`: 多个JWT令牌，使用逗号分隔，如：`token1,token2,token3`
+        - `CLIENT_API_KEYS`: 多个客户端API密钥，使用逗号分隔
+
+        **备选方式（分别配置）**：
+        - `JWT_TOKEN_1` - `JWT_TOKEN_5`: 单独配置每个JWT令牌
 
         ## Usage
 
@@ -102,71 +102,11 @@ jobs:
         Version: ${{ steps.version.outputs.VERSION }}
         EOF
 
-    - name: Create configuration script
-      run: |
-        cat > huggingface-space/process_config.py << 'EOF'
-        import json
-        import os
-
-        # Load existing config or create new one
-        try:
-            with open('jetbrainsai.json', 'r') as f:
-                config = json.load(f)
-        except:
-            config = {}
-
-        # Process JWT_TOKEN environment variable (comma-separated format)
-        jwt_token_env = os.environ.get('JWT_TOKEN', '')
-        if jwt_token_env:
-            tokens = [token.strip() for token in jwt_token_env.split(',') if token.strip()]
-            if tokens:
-                if 'clients' not in config:
-                    config['clients'] = []
-                
-                # Clear existing clients and add new ones from environment
-                config['clients'] = []
-                for i, token in enumerate(tokens, 1):
-                    config['clients'].append({
-                        'name': f'client_{i}',
-                        'token': token,
-                        'enabled': True
-                    })
-
-        # Fallback: Process individual JWT_TOKEN_1, JWT_TOKEN_2, etc.
-        if not jwt_token_env:
-            for i in range(1, 6):
-                token_key = f'JWT_TOKEN_{i}'
-                if token_key in os.environ and os.environ[token_key]:
-                    if 'clients' not in config:
-                        config['clients'] = []
-                    
-                    # Find or create client entry
-                    client_found = False
-                    for client in config['clients']:
-                        if client.get('name') == f'client_{i}':
-                            client['token'] = os.environ[token_key]
-                            client_found = True
-                            break
-                    
-                    if not client_found:
-                        config['clients'].append({
-                            'name': f'client_{i}',
-                            'token': os.environ[token_key],
-                            'enabled': True
-                        })
-
-        # Save updated config
-        with open('jetbrainsai.json', 'w') as f:
-            json.dump(config, f, indent=2)
-        EOF
-
     - name: Create startup script
       run: |
         cat > huggingface-space/start.sh << 'EOF'
         #!/bin/bash
-        # Process environment variables to JSON configuration
-        python3 process_config.py
-        # Start the application
+        # Start the application (main.py now handles environment variables directly)
         python main.py
         EOF
         chmod +x huggingface-space/start.sh
@@ -190,11 +130,7 @@ jobs:
 
         # Copy application files
         COPY main.py .
-        COPY config_manager.py .
-        COPY process_config.py .
         COPY start.sh .
-        COPY jetbrainsai.json* ./
-        COPY client_api_keys.json* ./
         COPY models.json* ./
 
         # Create a non-root user and set permissions
@@ -212,9 +148,9 @@ jobs:
         ENV PYTHONUNBUFFERED=1
         ENV DEBUG_MODE=false
 
-        # Health check
+        # Health check (using a simple Python script since /health endpoint may not exist)
         HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-            CMD curl -f http://localhost:8000/health || exit 1
+            CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/models')" || exit 1
 
         # Start the application
         CMD ["./start.sh"]
@@ -273,6 +209,8 @@ jobs:
         echo "Your space will be available at: https://huggingface.co/spaces/$SPACE_NAME"
         echo ""
         echo "📝 Don't forget to configure secrets in your Hugging Face Space:"
+        echo "   推荐方式："
+        echo "   - JWT_TOKEN=token1,token2,token3"
+        echo "   - CLIENT_API_KEYS=sk-key1,sk-key2,sk-key3"
+        echo "   备选方式："
         echo "   - JWT_TOKEN_1 through JWT_TOKEN_5"
-        echo "   - OPENAI_API_KEY (optional)"
-        echo "   - ANTHROPIC_API_KEY (optional)"
