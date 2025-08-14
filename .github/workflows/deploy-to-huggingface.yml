@@ -179,8 +179,13 @@ jobs:
         COPY client_api_keys.json* ./
         COPY models.json* ./
 
-        # Set script permissions
-        RUN chmod +x start.sh
+        # Create a non-root user and set permissions
+        RUN useradd -m -u 1000 appuser && \
+            chown -R appuser:appuser /app && \
+            chmod +x start.sh
+
+        # Switch to non-root user
+        USER appuser
 
         # Expose port
         EXPOSE 8000
