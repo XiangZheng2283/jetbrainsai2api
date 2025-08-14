@@ -126,12 +126,8 @@ jobs:
         COPY client_api_keys.json* ./
         COPY models.json* ./
 
-        # Create startup script
-        RUN cat > start.sh << 'SCRIPT'
-        #!/bin/bash
-
-        # Process environment variables to JSON configuration
-        python3 -c "
+        # Create configuration processing script
+        RUN cat > process_config.py << 'EOF'
         import json
         import os
 
@@ -167,8 +163,13 @@ jobs:
         # Save updated config
         with open('jetbrainsai.json', 'w') as f:
             json.dump(config, f, indent=2)
-        "
+        EOF
 
+        # Create startup script
+        RUN cat > start.sh << 'SCRIPT'
+        #!/bin/bash
+        # Process environment variables to JSON configuration
+        python3 process_config.py
         # Start the application
         python main.py
         SCRIPT
