@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  jetbrainsai2api:
+    build: .
+    ports:
+      - "8000:8000"
+    # 移除volumes挂载，让容器内部管理配置文件
+    environment:
+      - DEBUG_MODE=${DEBUG_MODE:-false}
+      # JWT Tokens - 支持多个JWT token
+      - JWT_TOKEN_1=${JWT_TOKEN_1:-}
+      - JWT_TOKEN_2=${JWT_TOKEN_2:-}
+      - JWT_TOKEN_3=${JWT_TOKEN_3:-}
+      - JWT_TOKEN_4=${JWT_TOKEN_4:-}
+      - JWT_TOKEN_5=${JWT_TOKEN_5:-}
+      # 或者使用逗号分隔的格式
+      - JWT_TOKENS=${JWT_TOKENS:-}
+      # License和Authorization信息
+      - LICENSE_ID_1=${LICENSE_ID_1:-}
+      - LICENSE_ID_2=${LICENSE_ID_2:-}
+      - AUTHORIZATION_1=${AUTHORIZATION_1:-}
+      - AUTHORIZATION_2=${AUTHORIZATION_2:-}
+    restart: unless-stopped
