@@ -64,7 +64,7 @@ spec:
       
       containers:
       - name: jetbrainsai2api
-        image: ghcr.io/your-username/jetbrainsai2api:latest
+        image: ghcr.io/GITHUB_USERNAME/jetbrainsai2api:1.0.0
         ports:
         - containerPort: 8000
           name: http
