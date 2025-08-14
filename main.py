@@ -3,6 +3,7 @@ import time
 import uuid
 import threading
 import asyncio
+import os
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
 import httpx
@@ -235,8 +236,19 @@ async def _save_accounts_to_file():
 
 
 def load_client_api_keys():
-    """加载客户端 API 密钥"""
+    """加载客户端 API 密钥（优先从环境变量读取）"""
     global VALID_CLIENT_KEYS
+    
+    # 首先尝试从环境变量读取
+    client_keys_env = os.getenv("CLIENT_API_KEYS")
+    if client_keys_env:
+        keys = [key.strip() for key in client_keys_env.split(",") if key.strip()]
+        if keys:
+            VALID_CLIENT_KEYS = set(keys)
+            print(f"从环境变量成功加载 {len(VALID_CLIENT_KEYS)} 个客户端 API 密钥")
+            return
+    
+    # 回退到从文件读取
     try:
         with open("client_api_keys.json", "r", encoding="utf-8") as f:
             keys = json.load(f)
@@ -248,9 +260,9 @@ def load_client_api_keys():
             if not VALID_CLIENT_KEYS:
                 print("警告: client_api_keys.json 为空")
             else:
-                print(f"成功加载 {len(VALID_CLIENT_KEYS)} 个客户端 API 密钥")
+                print(f"从文件成功加载 {len(VALID_CLIENT_KEYS)} 个客户端 API 密钥")
     except FileNotFoundError:
-        print("错误: 未找到 client_api_keys.json")
+        print("错误: 未找到 client_api_keys.json 且未设置 CLIENT_API_KEYS 环境变量")
         VALID_CLIENT_KEYS = set()
     except Exception as e:
         print(f"加载 client_api_keys.json 时出错: {e}")
@@ -258,8 +270,47 @@ def load_client_api_keys():
 
 
 def load_jetbrains_accounts():
-    """加载 JetBrains AI 认证信息"""
+    """加载 JetBrains AI 认证信息（优先从环境变量读取）"""
     global JETBRAINS_ACCOUNTS
+    processed_accounts = []
+    
+    # 首先尝试从环境变量 JWT_TOKEN 读取（逗号分隔格式）
+    jwt_tokens_env = os.getenv("JWT_TOKEN")
+    if jwt_tokens_env:
+        tokens = [token.strip() for token in jwt_tokens_env.split(",") if token.strip()]
+        for i, token in enumerate(tokens):
+            processed_accounts.append({
+                "licenseId": None,
+                "authorization": None,
+                "jwt": token,
+                "last_updated": int(time.time()),
+                "has_quota": True,
+                "last_quota_check": 0,
+            })
+        if processed_accounts:
+            JETBRAINS_ACCOUNTS = processed_accounts
+            print(f"从环境变量 JWT_TOKEN 成功加载 {len(JETBRAINS_ACCOUNTS)} 个 JetBrains AI 账户")
+            return
+    
+    # 其次尝试从分别的环境变量读取（JWT_TOKEN_1, JWT_TOKEN_2, ...）
+    for i in range(1, 11):  # 支持最多10个token
+        token = os.getenv(f"JWT_TOKEN_{i}")
+        if token and token.strip():
+            processed_accounts.append({
+                "licenseId": None,
+                "authorization": None,
+                "jwt": token.strip(),
+                "last_updated": int(time.time()),
+                "has_quota": True,
+                "last_quota_check": 0,
+            })
+    
+    if processed_accounts:
+        JETBRAINS_ACCOUNTS = processed_accounts
+        print(f"从分别的环境变量成功加载 {len(JETBRAINS_ACCOUNTS)} 个 JetBrains AI 账户")
+        return
+    
+    # 最后回退到从文件读取
     try:
         with open("jetbrainsai.json", "r", encoding="utf-8") as f:
             accounts_data = json.load(f)
@@ -269,7 +320,6 @@ def load_jetbrains_accounts():
             JETBRAINS_ACCOUNTS = []
             return
 
-        processed_accounts = []
         for account in accounts_data:
             processed_accounts.append(
                 {
@@ -286,10 +336,10 @@ def load_jetbrains_accounts():
         if not JETBRAINS_ACCOUNTS:
             print("警告: jetbrainsai.json 中未找到有效的认证信息")
         else:
-            print(f"成功加载 {len(JETBRAINS_ACCOUNTS)} 个 JetBrains AI 账户")
+            print(f"从文件成功加载 {len(JETBRAINS_ACCOUNTS)} 个 JetBrains AI 账户")
 
     except FileNotFoundError:
-        print("错误: 未找到 jetbrainsai.json 文件")
+        print("错误: 未找到 jetbrainsai.json 文件且未设置 JWT_TOKEN 环境变量")
         JETBRAINS_ACCOUNTS = []
     except Exception as e:
         print(f"加载 jetbrainsai.json 时出错: {e}")
@@ -1228,19 +1278,33 @@ async def messages_completions(
 
 # 主程序入口
 if __name__ == "__main__":
-    import os
+    # 检查环境变量配置
+    jwt_token_env = os.getenv("JWT_TOKEN")
+    client_keys_env = os.getenv("CLIENT_API_KEYS")
+    
+    print("正在检查配置...")
+    if jwt_token_env:
+        token_count = len([t.strip() for t in jwt_token_env.split(",") if t.strip()])
+        print(f"✓ 从环境变量 JWT_TOKEN 检测到 {token_count} 个 JWT 令牌")
+    else:
+        # 检查分别的环境变量
+        env_tokens = []
+        for i in range(1, 11):
+            if os.getenv(f"JWT_TOKEN_{i}"):
+                env_tokens.append(i)
+        if env_tokens:
+            print(f"✓ 从环境变量检测到 JWT_TOKEN_{min(env_tokens)} 到 JWT_TOKEN_{max(env_tokens)}")
+        else:
+            print("⚠ 未检测到 JWT_TOKEN 环境变量，将使用文件配置")
+    
+    if client_keys_env:
+        key_count = len([k.strip() for k in client_keys_env.split(",") if k.strip()])
+        print(f"✓ 从环境变量 CLIENT_API_KEYS 检测到 {key_count} 个客户端密钥")
+    else:
+        print("⚠ 未检测到 CLIENT_API_KEYS 环境变量，将使用文件配置")
 
-    # 创建示例配置文件（如果不存在）
-    if not os.path.exists("client_api_keys.json"):
-        with open("client_api_keys.json", "w", encoding="utf-8") as f:
-            json.dump(["sk-your-custom-key-here"], f, indent=2)
-        print("已创建示例 client_api_keys.json 文件")
-
-    if not os.path.exists("jetbrainsai.json"):
-        with open("jetbrainsai.json", "w", encoding="utf-8") as f:
-            json.dump([{"jwt": "your-jwt-here"}], f, indent=2)
-        print("已创建示例 jetbrainsai.json 文件")
-
+    # 创建示例配置文件（如果不存在且未设置环境变量）
+    # 只创建 models.json（如果不存在），因为它不使用环境变量配置
     if not os.path.exists("models.json"):
         with open("models.json", "w", encoding="utf-8") as f:
             example_config = {
@@ -1252,12 +1316,15 @@ if __name__ == "__main__":
             }
             json.dump(example_config, f, indent=2)
         print("已创建示例 models.json 文件")
-
-    print("正在启动 JetBrains AI OpenAI Compatible API 服务器...")
+    print("\n正在启动 JetBrains AI OpenAI Compatible API 服务器...")
     print("端点:")
     print("  GET  /v1/models")
     print("  POST /v1/chat/completions")
     print("  POST /v1/messages")
+    print("\n支持的环境变量:")
+    print("  JWT_TOKEN - 逗号分隔的JWT令牌列表")
+    print("  JWT_TOKEN_1, JWT_TOKEN_2, ... - 分别配置的JWT令牌")
+    print("  CLIENT_API_KEYS - 逗号分隔的客户端API密钥列表")
     print("\n在 Authorization header 中使用客户端 API 密钥 (Bearer sk-xxx)")
 
     uvicorn.run(app, host="0.0.0.0", port=8000)

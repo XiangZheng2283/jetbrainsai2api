@@ -58,9 +58,13 @@ huggingface-space/
 
 在Hugging Face Space中配置以下secrets：
 
-- `JWT_TOKEN_1` - `JWT_TOKEN_5`: 您的JWT令牌
+**推荐方式（逗号分隔格式）**：
+- `JWT_TOKEN`: 多个JWT令牌，使用逗号分隔，如：`token1,token2,token3`
 - `OPENAI_API_KEY`: OpenAI API密钥（可选）
 - `ANTHROPIC_API_KEY`: Anthropic API密钥（可选）
+
+**备选方式（分别配置）**：
+- `JWT_TOKEN_1` - `JWT_TOKEN_5`: 单独配置每个JWT令牌
 
 ## 📝 使用方法
 

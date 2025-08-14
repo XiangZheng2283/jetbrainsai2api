@@ -115,27 +115,45 @@ jobs:
         except:
             config = {}
 
-        # Update JWT tokens from environment variables
-        for i in range(1, 6):
-            token_key = f'JWT_TOKEN_{i}'
-            if token_key in os.environ and os.environ[token_key]:
+        # Process JWT_TOKEN environment variable (comma-separated format)
+        jwt_token_env = os.environ.get('JWT_TOKEN', '')
+        if jwt_token_env:
+            tokens = [token.strip() for token in jwt_token_env.split(',') if token.strip()]
+            if tokens:
                 if 'clients' not in config:
                     config['clients'] = []
                 
-                # Find or create client entry
-                client_found = False
-                for client in config['clients']:
-                    if client.get('name') == f'client_{i}':
-                        client['token'] = os.environ[token_key]
-                        client_found = True
-                        break
-                
-                if not client_found:
+                # Clear existing clients and add new ones from environment
+                config['clients'] = []
+                for i, token in enumerate(tokens, 1):
                     config['clients'].append({
                         'name': f'client_{i}',
-                        'token': os.environ[token_key],
+                        'token': token,
                         'enabled': True
                     })
+
+        # Fallback: Process individual JWT_TOKEN_1, JWT_TOKEN_2, etc.
+        if not jwt_token_env:
+            for i in range(1, 6):
+                token_key = f'JWT_TOKEN_{i}'
+                if token_key in os.environ and os.environ[token_key]:
+                    if 'clients' not in config:
+                        config['clients'] = []
+                    
+                    # Find or create client entry
+                    client_found = False
+                    for client in config['clients']:
+                        if client.get('name') == f'client_{i}':
+                            client['token'] = os.environ[token_key]
+                            client_found = True
+                            break
+                    
+                    if not client_found:
+                        config['clients'].append({
+                            'name': f'client_{i}',
+                            'token': os.environ[token_key],
+                            'enabled': True
+                        })
 
         # Save updated config
         with open('jetbrainsai.json', 'w') as f:
