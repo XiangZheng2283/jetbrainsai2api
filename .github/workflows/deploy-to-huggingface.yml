@@ -102,32 +102,9 @@ jobs:
         Version: ${{ steps.version.outputs.VERSION }}
         EOF
 
-    - name: Create Hugging Face Dockerfile
+    - name: Create configuration script
       run: |
-        cat > huggingface-space/Dockerfile << 'EOF'
-        FROM python:3.11-slim
-
-        WORKDIR /app
-
-        # Install system dependencies
-        RUN apt-get update && apt-get install -y \
-            gcc \
-            curl \
-            && rm -rf /var/lib/apt/lists/*
-
-        # Copy requirements and install Python dependencies
-        COPY requirements.txt .
-        RUN pip install --no-cache-dir -r requirements.txt
-
-        # Copy application files
-        COPY main.py .
-        COPY config_manager.py .
-        COPY jetbrainsai.json* ./
-        COPY client_api_keys.json* ./
-        COPY models.json* ./
-
-        # Create configuration processing script
-        RUN cat > process_config.py << 'EOF'
+        cat > huggingface-space/process_config.py << 'EOF'
         import json
         import os
 
@@ -165,15 +142,44 @@ jobs:
             json.dump(config, f, indent=2)
         EOF
 
-        # Create startup script
-        RUN cat > start.sh << 'SCRIPT'
+    - name: Create startup script
+      run: |
+        cat > huggingface-space/start.sh << 'EOF'
         #!/bin/bash
         # Process environment variables to JSON configuration
         python3 process_config.py
         # Start the application
         python main.py
-        SCRIPT
+        EOF
+        chmod +x huggingface-space/start.sh
 
+    - name: Create Hugging Face Dockerfile
+      run: |
+        cat > huggingface-space/Dockerfile << 'EOF'
+        FROM python:3.11-slim
+
+        WORKDIR /app
+
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y \
+            gcc \
+            curl \
+            && rm -rf /var/lib/apt/lists/*
+
+        # Copy requirements and install Python dependencies
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+
+        # Copy application files
+        COPY main.py .
+        COPY config_manager.py .
+        COPY process_config.py .
+        COPY start.sh .
+        COPY jetbrainsai.json* ./
+        COPY client_api_keys.json* ./
+        COPY models.json* ./
+
+        # Set script permissions
         RUN chmod +x start.sh
 
         # Expose port
