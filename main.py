@@ -274,32 +274,62 @@ def load_jetbrains_accounts():
     global JETBRAINS_ACCOUNTS
     processed_accounts = []
     
-    # 首先尝试从环境变量 JWT_TOKEN 读取（逗号分隔格式）
+    # 首先尝试从环境变量读取（支持JWT_TOKEN, LICENSE_IDS, AUTHORIZATION_TOKENS）
     jwt_tokens_env = os.getenv("JWT_TOKEN")
+    license_ids_env = os.getenv("LICENSE_IDS")
+    authorization_tokens_env = os.getenv("AUTHORIZATION_TOKENS")
+    
     if jwt_tokens_env:
-        tokens = [token.strip() for token in jwt_tokens_env.split(",") if token.strip()]
-        for i, token in enumerate(tokens):
-            processed_accounts.append({
-                "licenseId": None,
-                "authorization": None,
-                "jwt": token,
+        # 解析逗号分隔的值
+        jwt_tokens = [token.strip() for token in jwt_tokens_env.split(",") if token.strip()]
+        license_ids = []
+        authorization_tokens = []
+        
+        # 解析LICENSE_IDS（如果提供）
+        if license_ids_env:
+            license_ids = [lid.strip() for lid in license_ids_env.split(",") if lid.strip()]
+        
+        # 解析AUTHORIZATION_TOKENS（如果提供）
+        if authorization_tokens_env:
+            authorization_tokens = [auth.strip() for auth in authorization_tokens_env.split(",") if auth.strip()]
+        
+        # 按位置配对创建账户
+        max_len = max(len(jwt_tokens), len(license_ids), len(authorization_tokens))
+        for i in range(max_len):
+            account = {
+                "jwt": jwt_tokens[i] if i < len(jwt_tokens) else None,
+                "licenseId": license_ids[i] if i < len(license_ids) else None,
+                "authorization": authorization_tokens[i] if i < len(authorization_tokens) else None,
                 "last_updated": int(time.time()),
                 "has_quota": True,
                 "last_quota_check": 0,
-            })
+            }
+            # 至少需要有jwt或者同时有licenseId和authorization
+            if account["jwt"] or (account["licenseId"] and account["authorization"]):
+                processed_accounts.append(account)
+        
         if processed_accounts:
             JETBRAINS_ACCOUNTS = processed_accounts
-            print(f"从环境变量 JWT_TOKEN 成功加载 {len(JETBRAINS_ACCOUNTS)} 个 JetBrains AI 账户")
+            print(f"从环境变量成功加载 {len(JETBRAINS_ACCOUNTS)} 个 JetBrains AI 账户")
+            # 打印账户配置概况
+            for i, account in enumerate(JETBRAINS_ACCOUNTS):
+                jwt_status = "✓" if account.get("jwt") else "✗"
+                license_status = "✓" if account.get("licenseId") else "✗"
+                auth_status = "✓" if account.get("authorization") else "✗"
+                print(f"  账户 {i+1}: JWT({jwt_status}) LicenseId({license_status}) Authorization({auth_status})")
             return
     
     # 其次尝试从分别的环境变量读取（JWT_TOKEN_1, JWT_TOKEN_2, ...）
     for i in range(1, 11):  # 支持最多10个token
-        token = os.getenv(f"JWT_TOKEN_{i}")
-        if token and token.strip():
+        jwt_token = os.getenv(f"JWT_TOKEN_{i}")
+        license_id = os.getenv(f"LICENSE_ID_{i}")
+        authorization = os.getenv(f"AUTHORIZATION_TOKEN_{i}")
+        
+        if jwt_token or (license_id and authorization):
             processed_accounts.append({
-                "licenseId": None,
-                "authorization": None,
-                "jwt": token.strip(),
+                "licenseId": license_id.strip() if license_id else None,
+                "authorization": authorization.strip() if authorization else None,
+                "jwt": jwt_token.strip() if jwt_token else None,
                 "last_updated": int(time.time()),
                 "has_quota": True,
                 "last_quota_check": 0,
@@ -878,7 +908,7 @@ async def chat_completions(
         try:
             async with http_client.stream(
                 "POST",
-                "https://api.jetbrains.ai/user/v5/llm/chat/stream/v7",
+                "https://api.jetbrains.ai/user/v5/llm/chat/stream/v8",
                 json=payload,
                 headers=headers,
             ) as response:
@@ -1240,7 +1270,7 @@ async def messages_completions(
         try:
             async with http_client.stream(
                 "POST",
-                "https://api.jetbrains.ai/user/v5/llm/chat/stream/v7",
+                "https://api.jetbrains.ai/user/v5/llm/chat/stream/v8",
                 json=payload,
                 headers=headers,
             ) as response:
@@ -1280,22 +1310,44 @@ async def messages_completions(
 if __name__ == "__main__":
     # 检查环境变量配置
     jwt_token_env = os.getenv("JWT_TOKEN")
+    license_ids_env = os.getenv("LICENSE_IDS")
+    authorization_tokens_env = os.getenv("AUTHORIZATION_TOKENS")
     client_keys_env = os.getenv("CLIENT_API_KEYS")
     
     print("正在检查配置...")
     if jwt_token_env:
         token_count = len([t.strip() for t in jwt_token_env.split(",") if t.strip()])
         print(f"✓ 从环境变量 JWT_TOKEN 检测到 {token_count} 个 JWT 令牌")
+        
+        if license_ids_env:
+            license_count = len([l.strip() for l in license_ids_env.split(",") if l.strip()])
+            print(f"✓ 从环境变量 LICENSE_IDS 检测到 {license_count} 个许可证ID")
+        
+        if authorization_tokens_env:
+            auth_count = len([a.strip() for a in authorization_tokens_env.split(",") if a.strip()])
+            print(f"✓ 从环境变量 AUTHORIZATION_TOKENS 检测到 {auth_count} 个授权令牌")
     else:
         # 检查分别的环境变量
         env_tokens = []
+        env_licenses = []
+        env_auths = []
         for i in range(1, 11):
             if os.getenv(f"JWT_TOKEN_{i}"):
                 env_tokens.append(i)
-        if env_tokens:
-            print(f"✓ 从环境变量检测到 JWT_TOKEN_{min(env_tokens)} 到 JWT_TOKEN_{max(env_tokens)}")
+            if os.getenv(f"LICENSE_ID_{i}"):
+                env_licenses.append(i)
+            if os.getenv(f"AUTHORIZATION_TOKEN_{i}"):
+                env_auths.append(i)
+        
+        if env_tokens or env_licenses or env_auths:
+            if env_tokens:
+                print(f"✓ 检测到 JWT_TOKEN_{min(env_tokens)} 到 JWT_TOKEN_{max(env_tokens)}")
+            if env_licenses:
+                print(f"✓ 检测到 LICENSE_ID_{min(env_licenses)} 到 LICENSE_ID_{max(env_licenses)}")
+            if env_auths:
+                print(f"✓ 检测到 AUTHORIZATION_TOKEN_{min(env_auths)} 到 AUTHORIZATION_TOKEN_{max(env_auths)}")
         else:
-            print("⚠ 未检测到 JWT_TOKEN 环境变量，将使用文件配置")
+            print("⚠ 未检测到 JWT_TOKEN 相关环境变量，将使用文件配置")
     
     if client_keys_env:
         key_count = len([k.strip() for k in client_keys_env.split(",") if k.strip()])
@@ -1323,7 +1375,11 @@ if __name__ == "__main__":
     print("  POST /v1/messages")
     print("\n支持的环境变量:")
     print("  JWT_TOKEN - 逗号分隔的JWT令牌列表")
+    print("  LICENSE_IDS - 逗号分隔的许可证ID列表（与JWT_TOKEN按位置对应）")
+    print("  AUTHORIZATION_TOKENS - 逗号分隔的授权令牌列表（与JWT_TOKEN按位置对应）")
     print("  JWT_TOKEN_1, JWT_TOKEN_2, ... - 分别配置的JWT令牌")
+    print("  LICENSE_ID_1, LICENSE_ID_2, ... - 分别配置的许可证ID")
+    print("  AUTHORIZATION_TOKEN_1, AUTHORIZATION_TOKEN_2, ... - 分别配置的授权令牌")
     print("  CLIENT_API_KEYS - 逗号分隔的客户端API密钥列表")
     print("\n在 Authorization header 中使用客户端 API 密钥 (Bearer sk-xxx)")
 

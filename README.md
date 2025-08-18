@@ -64,38 +64,49 @@ cd jetbrainsai2api
 
 创建 `jetbrainsai.json` 文件。支持以下两种格式，可混合使用：
 
-**1. 自动刷新（推荐）**
-> `licenseId` 和 `authorization` 可在 JetBrains 相关的登录验证请求中捕获。（如上述2.过程）
-```json
-[
-    {
-        "licenseId": "Oxxxx",
-        "authorization": "eyJhbGcxxx"
-    }
-]
+### 🔧 环境变量配置（推荐）
+
+现在支持通过环境变量进行配置，无需手动创建JSON文件：
+
+#### 必需环境变量
+
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| `JWT_TOKEN` | JetBrains JWT令牌（逗号分隔多个） | `token1,token2,token3` |
+| `CLIENT_API_KEYS` | 客户端API密钥（逗号分隔多个） | `sk-key1,sk-key2,sk-key3` |
+
+#### JetBrains 认证配置
+
+| 变量名 | 说明 | 示例 |
+|--------|------|------|
+| `LICENSE_IDS` | 许可证ID（逗号分隔，与JWT_TOKEN按位置对应） | `O12345,O67890,O11111` |
+| `AUTHORIZATION_TOKENS` | 授权令牌（逗号分隔，与JWT_TOKEN按位置对应） | `eyJhbGc1,eyJhbGc2,eyJhbGc3` |
+
+#### 分别配置方式（可选）
+
+| 变量名 | 说明 |
+|--------|------|
+| `JWT_TOKEN_1, JWT_TOKEN_2, ...` | 分别配置的JWT令牌 |
+| `LICENSE_ID_1, LICENSE_ID_2, ...` | 分别配置的许可证ID |
+| `AUTHORIZATION_TOKEN_1, AUTHORIZATION_TOKEN_2, ...` | 分别配置的授权令牌 |
+
+#### 配置示例
+
+```bash
+# 基本配置
+export JWT_TOKEN="jwt1,jwt2,jwt3"
+export CLIENT_API_KEYS="sk-key1,sk-key2"
+
+# 完整配置（支持JWT自动刷新）
+export JWT_TOKEN="jwt1,jwt2,jwt3"
+export LICENSE_IDS="O123,O456,O789"
+export AUTHORIZATION_TOKENS="auth1,auth2,auth3"
+export CLIENT_API_KEYS="sk-key1,sk-key2"
 ```
 
-**2. 静态 JWT**
-```json
-[
-    {
-        "jwt": "your-jwt-here-1"
-    }
-]
-```
+详细配置方法请参考：[环境变量配置示例](ENV_VARIABLES_EXAMPLE.md)
 
-**3. 混合使用**
-```json
-[
-    {
-        "jwt": "your-jwt-here-1",
-        "licenseId": "Oxxxx",
-        "authorization": "eyJhbGcxxx"
-    }
-]
-```
-
-#### 配置客户端密钥
+#### 配置客户端密钥（文件方式）
 创建 `client_api_keys.json`：
 ```json
 [
